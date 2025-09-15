@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手動存提款審核 - 原型</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc;
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 250px;
+            background-color: #334155;
+            color: #fff;
+            text-align: left;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 10;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -125px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.875rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        .status-pending { background-color: #fef9c3; color: #ca8a04; border: 1px solid #fde68a; }
+        .status-approved { background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; }
+        .status-rejected { background-color: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+        
+        /* Modal styles */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Toast styles */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            color: white;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            transform: translateY(-20px);
+            z-index: 100;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast-success { background-color: #22c55e; }
+        .toast-error { background-color: #ef4444; }
+
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto bg-white rounded-lg shadow-md p-6">
+        
+        <!-- 標題 -->
+        <header class="pb-4 border-b border-gray-200 mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">手動存提款審核</h1>
+            <p class="text-sm text-gray-500 mt-1">此頁面用於審核金額 > ₱5,000 的手動存提款申請。</p>
+        </header>
+
+        <!-- 搜尋區塊 -->
+        <div id="search-filters" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+            <div>
+                <label for="searchInput" class="block text-sm font-medium text-gray-700 mb-1">搜尋目標</label>
+                <div class="flex">
+                    <select id="searchField" class="border-gray-300 rounded-l-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                        <option value="applicationId">申請單號</option>
+                        <option value="applicant">申請人</option>
+                        <option value="userId">玩家ID</option>
+                    </select>
+                    <input type="text" id="searchInput" placeholder="請輸入資料" class="flex-1 block w-full min-w-0 rounded-none rounded-r-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                </div>
+            </div>
+            <div>
+                <label for="statusFilter" class="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+                <select id="statusFilter" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                    <option value="all">全部</option>
+                    <option value="Pending Approval">待審核</option>
+                    <option value="Approved">核准</option>
+                    <option value="Rejected">拒絕</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label for="startDate" class="block text-sm font-medium text-gray-700 mb-1">開始時間</label>
+                    <input type="date" id="startDate" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                </div>
+                <div>
+                    <label for="endDate" class="block text-sm font-medium text-gray-700 mb-1">結束時間</label>
+                    <input type="date" id="endDate" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                </div>
+            </div>
+            <div class="flex items-end">
+                <button id="searchButton" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    搜尋
+                </button>
+            </div>
+        </div>
+
+        <!-- 列表區塊 -->
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">申請單狀態</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">申請單號</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">申請時間</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">申請人</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">玩家ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">存提類型</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">存提金額</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生效時間</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">申請人備註/原因</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">審核人備註</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最後更新時間</th>
+                    </tr>
+                </thead>
+                <tbody id="applications-table-body" class="bg-white divide-y divide-gray-200">
+                    <!-- Data will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 審核 Modal -->
+    <div id="reviewModal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <h2 class="text-xl font-bold mb-4 text-gray-800">審核手動存提申請</h2>
+            <div class="space-y-4 text-sm">
+                <p><span class="font-semibold text-gray-600">申請單號:</span> <span id="modal-applicationId" class="text-gray-900"></span></p>
+                <p><span class="font-semibold text-gray-600">玩家ID:</span> <span id="modal-userId" class="text-gray-900"></span></p>
+                <p><span class="font-semibold text-gray-600">存提金額:</span> <span id="modal-amount" class="text-red-600 font-bold"></span></p>
+                <div class="p-3 bg-gray-50 rounded-md border border-gray-200">
+                    <p class="font-semibold text-gray-600">申請人備註:</p>
+                    <p id="modal-applicantRemarks" class="text-gray-800 mt-1"></p>
+                </div>
+                <div>
+                    <label class="block font-semibold text-gray-600 mb-2">審核結果 <span class="text-red-500">*</span></label>
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center">
+                            <input type="radio" name="approvalResult" value="Approved" class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                            <span class="ml-2 text-green-700 font-medium">核准</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="radio" name="approvalResult" value="Rejected" class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                            <span class="ml-2 text-red-700 font-medium">拒絕</span>
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label for="approverRemarks" class="block font-semibold text-gray-600 mb-1">審核人備註</label>
+                    <textarea id="approverRemarks" rows="3" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm" placeholder="請輸入備註 (非必填，最多500字)"></textarea>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button id="cancelReview" class="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                <button id="submitReview" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">提交審核</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 確認 Modal -->
+    <div id="confirmationModal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <h2 id="confirmationTitle" class="text-xl font-bold mb-4"></h2>
+            <p id="confirmationMessage" class="text-gray-600 mb-6"></p>
+            <div class="flex justify-end space-x-3">
+                <button id="cancelConfirmation" class="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                <button id="confirmAction" class="px-4 py-2 text-white rounded-md"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div id="toast" class="toast"></div>
+
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- 模擬資料 ---
+        const mockData = [
+            { id: 'WD20250826001', status: 'Pending Approval', applicationTime: '2025-08-26 10:05:12', applicant: 'operator01', userId: 'player12345', type: '手動提款', amount: 15000.00, executionTime: '2025-08-26 11:00:00', applicantRemarks: '玩家活動獎勵發放，VIP專屬福利。', approverRemarks: '', lastUpdated: '2025-08-26 10:05:12' },
+            { id: 'DP20250826002', status: 'Pending Approval', applicationTime: '2025-08-26 09:30:45', applicant: 'cs_agent_88', userId: 'rich_guy_007', type: '手動存款', amount: 50000.00, executionTime: '2025-08-26 10:30:00', applicantRemarks: '線下大額匯款已確認到帳，需手動補點。', approverRemarks: '', lastUpdated: '2025-08-26 09:30:45' },
+            { id: 'WD20250825015', status: 'Approved', applicationTime: '2025-08-25 18:20:00', applicant: 'operator01', userId: 'winner_king', type: '手動提款', amount: 8888.88, executionTime: '2025-08-25 19:00:00', applicantRemarks: '捕魚機大賽前三名獎金。', approverRemarks: 'manager_lee - 已確認賽事結果無誤。', lastUpdated: '2025-08-25 18:35:10' },
+            { id: 'WD20250825011', status: 'Rejected', applicationTime: '2025-08-25 15:00:19', applicant: 'cs_agent_lisa', userId: 'player_error', type: '手動提款', amount: 6000.00, executionTime: '2025-08-25 16:00:00', applicantRemarks: '玩家聲稱系統吃點，要求補償。', approverRemarks: 'supervisor_chen - 經查核，無此異常紀錄，故拒絕。', lastUpdated: '2025-08-25 15:25:03' },
+            { id: 'DP20250825009', status: 'Approved', applicationTime: '2025-08-25 14:10:55', applicant: 'operator02', userId: 'vip_player01', type: '手動存款', amount: 20000.00, executionTime: '2025-08-25 15:00:00', applicantRemarks: 'VIP生日禮金。', approverRemarks: 'manager_lee - OK', lastUpdated: '2025-08-25 14:15:22' },
+            { id: 'WD20250826003', status: 'Pending Approval', applicationTime: '2025-08-26 11:15:30', applicant: 'cs_agent_lisa', userId: 'lucky_cat_777', type: '手動提款', amount: 7500.00, executionTime: '2025-08-26 12:00:00', applicantRemarks: '老虎機活動特殊獎項。', approverRemarks: '', lastUpdated: '2025-08-26 11:15:30' },
+             { id: 'WD20250824005', status: 'Rejected', applicationTime: '2025-08-24 11:45:00', applicant: 'operator01', userId: 'suspicious_acc', type: '手動提款', amount: 100000.00, executionTime: '2025-08-24 12:00:00', applicantRemarks: '玩家申請大額提款。', approverRemarks: 'risk_control_team - 風控審核未通過，帳戶行為異常，暫時凍結。', lastUpdated: '2025-08-24 11:55:10' },
+        ];
+        let currentData = [...mockData];
+        let currentReviewId = null;
+
+        // --- DOM 元素 ---
+        const tableBody = document.getElementById('applications-table-body');
+        const reviewModal = document.getElementById('reviewModal');
+        const confirmationModal = document.getElementById('confirmationModal');
+        const searchButton = document.getElementById('searchButton');
+
+        // --- 核心功能 ---
+        const getStatusBadge = (status) => {
+            const statusMap = {
+                'Pending Approval': { text: '待審核', class: 'status-pending' },
+                'Approved': { text: '核准', class: 'status-approved' },
+                'Rejected': { text: '拒絕', class: 'status-rejected' }
+            };
+            const config = statusMap[status] || { text: status, class: 'bg-gray-200 text-gray-800' };
+            return `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${config.class}">${config.text}</span>`;
+        };
+
+        const renderTable = (data) => {
+            // 排序：待審核 > 其他，然後依申請時間由新到舊
+            const statusOrder = { 'Pending Approval': 1, 'Approved': 2, 'Rejected': 3 };
+            const sortedData = data.sort((a, b) => {
+                const statusA = statusOrder[a.status] || 99;
+                const statusB = statusOrder[b.status] || 99;
+                if (statusA !== statusB) {
+                    return statusA - statusB;
+                }
+                return new Date(b.applicationTime) - new Date(a.applicationTime);
+            });
+
+            tableBody.innerHTML = sortedData.map(item => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        ${item.status === 'Pending Approval' ? `<button class="text-indigo-600 hover:text-indigo-900 review-btn" data-id="${item.id}">審核</button>` : '-'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">${getStatusBadge(item.status)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.applicationTime}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.applicant}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.userId}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.type}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-bold">₱${item.amount.toLocaleString()}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.executionTime}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div class="tooltip truncate max-w-[150px]">
+                            ${item.applicantRemarks || '-'}
+                            <span class="tooltiptext">${item.applicantRemarks || '無'}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div class="tooltip truncate max-w-[150px]">
+                            ${item.approverRemarks || '-'}
+                            <span class="tooltiptext">${item.approverRemarks || '無'}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.lastUpdated}</td>
+                </tr>
+            `).join('');
+        };
+        
+        // --- Modal & Toast 控制 ---
+        const openModal = (modal) => modal.classList.remove('hidden');
+        const closeModal = (modal) => modal.classList.add('hidden');
+        
+        const showToast = (message, type = 'success') => {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type === 'success' ? 'toast-success' : 'toast-error'}`;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        };
+
+        const openReviewModal = (id) => {
+            const item = currentData.find(d => d.id === id);
+            if (!item) return;
+            
+            currentReviewId = id;
+            document.getElementById('modal-applicationId').textContent = item.id;
+            document.getElementById('modal-userId').textContent = item.userId;
+            document.getElementById('modal-amount').textContent = `₱${item.amount.toLocaleString()}`;
+            document.getElementById('modal-applicantRemarks').textContent = item.applicantRemarks || '無';
+            document.getElementById('approverRemarks').value = '';
+            document.querySelectorAll('input[name="approvalResult"]').forEach(radio => radio.checked = false);
+            
+            openModal(reviewModal);
+        };
+        
+        const openConfirmation = (action) => {
+            const title = document.getElementById('confirmationTitle');
+            const message = document.getElementById('confirmationMessage');
+            const confirmBtn = document.getElementById('confirmAction');
+
+            if (action === 'Approved') {
+                title.textContent = '確定要核准嗎？';
+                message.textContent = '核准後申請單將自動進入執行排程，此操作無法復原。';
+                confirmBtn.textContent = '確定核准';
+                confirmBtn.className = 'px-4 py-2 text-white rounded-md bg-green-600 hover:bg-green-700';
+            } else {
+                title.textContent = '確定要拒絕嗎？';
+                message.textContent = '此申請將被永久終止，無法再執行。';
+                confirmBtn.textContent = '確定拒絕';
+                confirmBtn.className = 'px-4 py-2 text-white rounded-md bg-red-600 hover:bg-red-700';
+            }
+            confirmBtn.dataset.action = action;
+            openModal(confirmationModal);
+        };
+        
+        // --- 事件監聽 ---
+        tableBody.addEventListener('click', (e) => {
+            if (e.target.classList.contains('review-btn')) {
+                openReviewModal(e.target.dataset.id);
+            }
+        });
+
+        document.getElementById('cancelReview').addEventListener('click', () => closeModal(reviewModal));
+        
+        document.getElementById('submitReview').addEventListener('click', () => {
+            const selectedResult = document.querySelector('input[name="approvalResult"]:checked');
+            if (!selectedResult) {
+                alert('請選擇審核結果！');
+                return;
+            }
+            closeModal(reviewModal);
+            openConfirmation(selectedResult.value);
+        });
+        
+        document.getElementById('cancelConfirmation').addEventListener('click', () => closeModal(confirmationModal));
+
+        document.getElementById('confirmAction').addEventListener('click', (e) => {
+            const action = e.target.dataset.action;
+            const remarks = document.getElementById('approverRemarks').value;
+            const itemIndex = currentData.findIndex(d => d.id === currentReviewId);
+            const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+            if (itemIndex !== -1) {
+                currentData[itemIndex].status = action;
+                currentData[itemIndex].approverRemarks = `主管 - ${remarks || '無'}`;
+                currentData[itemIndex].lastUpdated = now;
+                
+                const originalMockIndex = mockData.findIndex(d => d.id === currentReviewId);
+                if(originalMockIndex !== -1) {
+                    mockData[originalMockIndex] = {...currentData[itemIndex]};
+                }
+
+                renderTable(currentData);
+                closeModal(confirmationModal);
+                showToast(`申請單：${currentReviewId} 已成功${action === 'Approved' ? '核准' : '拒絕'}`,'success');
+            } else {
+                showToast('操作失敗：找不到該申請單。', 'error');
+            }
+        });
+        
+        searchButton.addEventListener('click', () => {
+            const searchField = document.getElementById('searchField').value;
+            const searchValue = document.getElementById('searchInput').value.trim().toLowerCase();
+            const statusValue = document.getElementById('statusFilter').value;
+            
+            let filteredData = mockData.filter(item => {
+                const searchMatch = !searchValue || item[searchField].toLowerCase().includes(searchValue);
+                const statusMatch = statusValue === 'all' || item.status === statusValue;
+                return searchMatch && statusMatch;
+            });
+            
+            currentData = filteredData;
+            renderTable(currentData);
+        });
+
+        // --- 初始渲染 ---
+        renderTable(currentData);
+    });
+    </script>
+
+</body>
+</html>
